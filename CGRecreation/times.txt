@@ -1,0 +1,6 @@
+The times taken to solve a random 5000x5000 system.
+  814.595 ms (51 allocations: 763.21 MiB)
+  819.695 ms (51 allocations: 763.21 MiB)
+  818.859 ms (51 allocations: 763.21 MiB)
+  814.343 ms (51 allocations: 763.21 MiB)
+  811.036 ms (51 allocations: 763.21 MiB)
