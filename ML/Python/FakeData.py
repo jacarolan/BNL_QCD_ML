@@ -28,20 +28,20 @@ def LoadRawVariables():
                             with open(fname) as fp:
                                 for i, line in enumerate(fp):
                                     if i >= 7 and i <= 70:           # The start of Gauss -> Point 2pt correlation functions
-                                        c2pt_OTHER.append([float(x) for x in line.rstrip().split()[1:3]])
+                                        c2pt_OTHER.append([float(x) for x in line.rstrip().split()[1:5]])
                                     if i >= 5182 and i <= 5245:      # The start of Gauss -> Gauss 2pt correlation functions
-                                        c2pt.append([float(x) for x in line.rstrip().split()[1:3]])
+                                        c2pt.append([float(x) for x in line.rstrip().split()[1:5]])
                                         ts.append(i - 5182)
                                         taus.append(tau)
                                         xs.append(x)
                                         ys.append(y)
                                         zs.append(z)
                                     elif i >= 10154 and i <= 10217:
-                                        c3pt_S.append([float(x) for x in line.rstrip().split()[1:3]])
+                                        c3pt_S.append([float(x) for x in line.rstrip().split()[1:5]])
                                     elif i >= 10229 and i <= 10292:
-                                        c3pt_V.append([float(x) for x in line.rstrip().split()[1:3]])
+                                        c3pt_V.append([float(x) for x in line.rstrip().split()[1:5]])
                                     elif i >= 19979 and i <= 20042:
-                                        c3pt_A.append([float(x) for x in line.rstrip().split()[1:3]])
+                                        c3pt_A.append([float(x) for x in line.rstrip().split()[1:5]])
                                     elif i > 20042:
                                         break
     
@@ -53,8 +53,9 @@ c2pt_factor_raw = sum(np.array(c2pt)) / len(c2pt)
 N_factor = np.sqrt(c2pt_factor_raw[0] ** 2 + c2pt_factor_raw[1] ** 2)
 
 for i in range(len(c2pt)):
-    for j in range(2):
+    for j in range(len(c2pt[i])):
         c2pt[i][j] /= N_factor
+    for j in range(len(c3pt_S[i])):
         c3pt_S[i][j] /= N_factor
         c3pt_V[i][j] /= N_factor
         c3pt_A[i][j] /= N_factor
@@ -69,21 +70,25 @@ for f in features_unshifted:
 
 features = np.array(features)
 
-labels_S = np.array([sum(c3pt_S[i:i+64][0]) / 64 for i in range(0, len(c3pt_S), 64)])
-labels_A = np.array([sum(c3pt_A[i:i+64][0]) / 64 for i in range(0, len(c3pt_A), 64)])
-labels_V = np.array([sum(c3pt_V[i:i+64][0]) / 64 for i in range(0, len(c3pt_V), 64)])
+labels_S_up = np.array([sum(c3pt_S[i:i+64][0]) / 64 for i in range(0, len(c3pt_S), 64)])
+labels_A_up = np.array([sum(c3pt_A[i:i+64][0]) / 64 for i in range(0, len(c3pt_A), 64)])
+labels_V_up = np.array([sum(c3pt_V[i:i+64][0]) / 64 for i in range(0, len(c3pt_V), 64)])
+
+labels_S_down = np.array([sum(c3pt_S[i:i+64][2]) / 64 for i in range(0, len(c3pt_S), 64)])
+labels_A_down = np.array([sum(c3pt_A[i:i+64][2]) / 64 for i in range(0, len(c3pt_A), 64)])
+labels_V_down = np.array([sum(c3pt_V[i:i+64][2]) / 64 for i in range(0, len(c3pt_V), 64)])
 
 labelFrac = 0.5
 BCFrac = 0.1
 
 c2pt_footer = "ENDPROP\n"
-c3pt_footer = "End_NUC3PT\n"
+c3pt_footer = "END_NUC3PT\n"
 c2pt_header = """STARTPROP
 MASSES:  1.000000e-03 1.000000e-03 1.000000e-03
 SOURCE: GAUSS 70 600 0 
 SINK: POINT
-MOM: 2 0 0
-OPER: NUC_G5C_PP5 NUC_G5C_NP5
+MOM: 0 0 0
+OPER: NUC_G5C_PP5
 """
 c3pt_V_header = """START_NUC3PT
 MASSES:  1.000000e-03 1.000000e-03 1.000000e-03
@@ -94,7 +99,7 @@ OPER: G4
 OP_MOM: 0 0 0
 FACT: 1.000000e+00 0.000000e+00
 PROJ: PPAR
-QUARKS:    up
+QUARKS:    up      down
 """
 c3pt_S_header = """START_NUC3PT
 MASSES:  1.000000e-03 1.000000e-03 1.000000e-03
@@ -105,7 +110,7 @@ OPER: G0
 OP_MOM: 0 0 0
 FACT: 1.000000e+00 0.000000e+00
 PROJ: PPAR
-QUARKS:    up
+QUARKS:    up      down
 """
 c3pt_A_header = """START_NUC3PT
 MASSES:  1.000000e-03 1.000000e-03 1.000000e-03
@@ -116,22 +121,33 @@ OPER: G5G3
 OP_MOM: 0 0 0
 FACT: 0.000000e+00 1.000000e+00
 PROJ: PPAR_5Z
-QUARKS:    up
+QUARKS:    up      down
 """
 
 
 
-labelEnd = int(len(labels_S) * labelFrac)
-BCEnd    = int(len(labels_S) * (BCFrac + labelFrac))
+labelEnd = int(len(labels_S_up) * labelFrac)
+BCEnd    = int(len(labels_S_up) * (BCFrac + labelFrac))
 
-X_train, Y_train, X_bc, Y_bc, X_test, Y_test = features[:labelEnd], labels_S[:labelEnd], features[labelEnd:BCEnd], labels_S[labelEnd:BCEnd], features[BCEnd:], labels_S[BCEnd:]
+### Scalar Charge
 
-gbr = GradientBoostingRegressor(learning_rate=0.05, n_estimators=50, max_depth=3)
-gbr.fit(X_train, Y_train)
+X_train, Y_train_up, Y_train_down = features[:labelEnd], labels_S_up[:labelEnd], labels_S_down[:labelEnd]
+X_bc, Y_bc_up, Y_bc_down = features[labelEnd:BCEnd], labels_S_up[labelEnd:BCEnd], labels_S_down[labelEnd:BCEnd]
+X_test, Y_test_up, Y_test_down = features[BCEnd:], labels_S_up[BCEnd:], labels_S_down[BCEnd:]
 
-y_bc_pred = gbr.predict(X_bc)
+gbr_up = GradientBoostingRegressor(learning_rate=0.05, n_estimators=50, max_depth=3)
+gbr_up.fit(X_train, Y_train_up)
 
-biasCrxn = np.average(Y_bc - y_bc_pred)
+y_bc_pred = gbr_up.predict(X_bc)
+
+biasCrxn_up = np.average(Y_bc_up - y_bc_pred)
+
+gbr_down = GradientBoostingRegressor(learning_rate=0.05, n_estimators=50, max_depth=3)
+gbr_down.fit(X_train, Y_train_down)
+
+y_bc_pred = gbr_down.predict(X_bc)
+
+biasCrxn_down = np.average(Y_bc_down - y_bc_pred)
 
 trials = 0
 errors = []
@@ -140,9 +156,8 @@ ML_samples = []
 DM_samples = []
 for i in range(len(X_test)):
     testImg = X_test[i]
-    testLabel = Y_test[i]
-    pred = gbr.predict([testImg])[0] + biasCrxn
-    errors.append(pred - testLabel)
+    pred_up = gbr_up.predict([testImg])[0] + biasCrxn_up
+    pred_down = gbr_down.predict([testImg])[0] + biasCrxn_down
     fakeName = "../Data/FakeData/FakeData" + str(i) + ".txt"
     if not os.path.exists(fakeName):
     	with open(fakeName, 'w+'): pass
@@ -154,19 +169,28 @@ for i in range(len(X_test)):
     fakeDataFile.write(c2pt_footer)
     fakeDataFile.write(c3pt_S_header)
     for j in range(64):
-    	fakeDataFile.write(str(j) + " " + str(pred) + " 0.0\n")
+    	fakeDataFile.write(str(j) + " " + str(pred_up) + " 0.0 " + str(pred_down) + " 0.0\n")
     fakeDataFile.write(c3pt_footer)
 
 ### Vector Charge
 
-X_train, Y_train, X_bc, Y_bc, X_test, Y_test = features[:labelEnd], labels_V[:labelEnd], features[labelEnd:BCEnd], labels_V[labelEnd:BCEnd], features[BCEnd:], labels_V[BCEnd:]
+X_train, Y_train_up, Y_train_down = features[:labelEnd], labels_V_up[:labelEnd], labels_V_down[:labelEnd]
+X_bc, Y_bc_up, Y_bc_down = features[labelEnd:BCEnd], labels_V_up[labelEnd:BCEnd], labels_V_down[labelEnd:BCEnd]
+X_test, Y_test_up, Y_test_down = features[BCEnd:], labels_V_up[BCEnd:], labels_V_down[BCEnd:]
 
-gbr = GradientBoostingRegressor(learning_rate=0.05, n_estimators=50, max_depth=3)
-gbr.fit(X_train, Y_train)
+gbr_up = GradientBoostingRegressor(learning_rate=0.05, n_estimators=50, max_depth=3)
+gbr_up.fit(X_train, Y_train_up)
 
-y_bc_pred = gbr.predict(X_bc)
+y_bc_pred = gbr_up.predict(X_bc)
 
-biasCrxn = np.average(Y_bc - y_bc_pred)
+biasCrxn_up = np.average(Y_bc_up - y_bc_pred)
+
+gbr_down = GradientBoostingRegressor(learning_rate=0.05, n_estimators=50, max_depth=3)
+gbr_down.fit(X_train, Y_train_down)
+
+y_bc_pred = gbr_down.predict(X_bc)
+
+biasCrxn_down = np.average(Y_bc_down - y_bc_pred)
 
 trials = 0
 errors = []
@@ -175,26 +199,34 @@ ML_samples = []
 DM_samples = []
 for i in range(len(X_test)):
     testImg = X_test[i]
-    testLabel = Y_test[i]
-    pred = gbr.predict([testImg])[0] + biasCrxn
-    errors.append(pred - testLabel)
+    pred_up = gbr_up.predict([testImg])[0] + biasCrxn_up
+    pred_down = gbr_down.predict([testImg])[0] + biasCrxn_down
     fakeName = "../Data/FakeData/FakeData" + str(i) + ".txt"
     fakeDataFile = open(fakeName, "a")
     fakeDataFile.write(c3pt_V_header)
     for j in range(64):
-    	fakeDataFile.write(str(j) + " " + str(pred) + " 0.0\n")
+    	fakeDataFile.write(str(j) + " " + str(pred_up) + " 0.0 " + str(pred_down) + " 0.0\n")
     fakeDataFile.write(c3pt_footer)
 
 ### Axial Charge
 
-X_train, Y_train, X_bc, Y_bc, X_test, Y_test = features[:labelEnd], labels_A[:labelEnd], features[labelEnd:BCEnd], labels_A[labelEnd:BCEnd], features[BCEnd:], labels_A[BCEnd:]
+X_train, Y_train_up, Y_train_down = features[:labelEnd], labels_A_up[:labelEnd], labels_A_down[:labelEnd]
+X_bc, Y_bc_up, Y_bc_down = features[labelEnd:BCEnd], labels_A_up[labelEnd:BCEnd], labels_A_down[labelEnd:BCEnd]
+X_test, Y_test_up, Y_test_down = features[BCEnd:], labels_A_up[BCEnd:], labels_A_down[BCEnd:]
 
-gbr = GradientBoostingRegressor(learning_rate=0.05, n_estimators=50, max_depth=3)
-gbr.fit(X_train, Y_train)
+gbr_up = GradientBoostingRegressor(learning_rate=0.05, n_estimators=50, max_depth=3)
+gbr_up.fit(X_train, Y_train_up)
 
-y_bc_pred = gbr.predict(X_bc)
+y_bc_pred = gbr_up.predict(X_bc)
 
-biasCrxn = np.average(Y_bc - y_bc_pred)
+biasCrxn_up = np.average(Y_bc_up - y_bc_pred)
+
+gbr_down = GradientBoostingRegressor(learning_rate=0.05, n_estimators=50, max_depth=3)
+gbr_down.fit(X_train, Y_train_down)
+
+y_bc_pred = gbr_down.predict(X_bc)
+
+biasCrxn_down = np.average(Y_bc_down - y_bc_pred)
 
 trials = 0
 errors = []
@@ -203,12 +235,11 @@ ML_samples = []
 DM_samples = []
 for i in range(len(X_test)):
     testImg = X_test[i]
-    testLabel = Y_test[i]
-    pred = gbr.predict([testImg])[0] + biasCrxn
-    errors.append(pred - testLabel)
+    pred_up = gbr_up.predict([testImg])[0] + biasCrxn_up
+    pred_down = gbr_down.predict([testImg])[0] + biasCrxn_down
     fakeName = "../Data/FakeData/FakeData" + str(i) + ".txt"
     fakeDataFile = open(fakeName, "a")
-    fakeDataFile.write(c3pt_A_header)
+    fakeDataFile.write(c3pt_V_header)
     for j in range(64):
-    	fakeDataFile.write(str(j) + " " + str(pred) + " 0.0\n")
+    	fakeDataFile.write(str(j) + " " + str(pred_up) + " 0.0 " + str(pred_down) + " 0.0\n")
     fakeDataFile.write(c3pt_footer)
