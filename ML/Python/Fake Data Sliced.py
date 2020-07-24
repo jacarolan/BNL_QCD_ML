@@ -16,6 +16,7 @@ def LoadRawVariables():
     c3pt_V = []
     c3pt_A = []
     c2pt_OTHER = []
+    sample_num = []
     
     
     for tau in range(0, 49, 8):
@@ -24,6 +25,10 @@ def LoadRawVariables():
                 for z in range(0, 25, 8):
                     for sample in range(748, 1421, 16):
                         fname = "../Data/T" + str(tau) + "/x" + str(x) + "y" + str(y) + "z" + str(z) + "/nuc3pt.dat." + str(sample)
+                        sample_num.append(sample)
+                        xs.append(x)
+                        ys.append(y)
+                        zs.append(z)
                         if path.exists(fname):
                             with open(fname) as fp:
                                 for i, line in enumerate(fp):
@@ -33,9 +38,6 @@ def LoadRawVariables():
                                         c2pt.append([float(x) for x in line.rstrip().split()[1:5]])
                                         ts.append(i - 5182)
                                         taus.append(tau)
-                                        xs.append(x)
-                                        ys.append(y)
-                                        zs.append(z)
                                     elif i >= 10154 and i <= 10217:
                                         c3pt_S.append([float(x) for x in line.rstrip().split()[1:5]])
                                     elif i >= 10229 and i <= 10292:
@@ -45,9 +47,9 @@ def LoadRawVariables():
                                     elif i > 20042:
                                         break
     
-    return ts, taus, xs, ys, zs, c2pt, c3pt_S, c3pt_V, c3pt_A, c2pt_OTHER
+    return ts, taus, xs, ys, zs, c2pt, c3pt_S, c3pt_V, c3pt_A, c2pt_OTHER, sample_num
 
-ts, taus, xs, ys, zs, c2pt, c3pt_S, c3pt_V, c3pt_A, c2pt_OTHER = LoadRawVariables()
+ts, taus, xs, ys, zs, c2pt, c3pt_S, c3pt_V, c3pt_A, c2pt_OTHER, sample_num = LoadRawVariables()
 
 c2pt_factor_raw = sum(np.array(c2pt)) / len(c2pt)
 N_factor = np.sqrt(c2pt_factor_raw[0] ** 2 + c2pt_factor_raw[1] ** 2)
@@ -135,8 +137,6 @@ X_test, Y_test_up, Y_test_down = features[BCEnd:], labels_S_up[:, BCEnd:], label
 
 gbr_up = list(range(64))
 gbr_down = list(range(64))
-biasCrxn_up = list(range(64))
-biasCrxn_down = list(range(64))
 for i in range(64):
     gbr_up[i] = GradientBoostingRegressor(learning_rate=0.1, n_estimators=100, max_depth=3)
     gbr_up[i].fit(X_train, Y_train_up[i])
@@ -144,14 +144,8 @@ for i in range(64):
     gbr_down[i] = GradientBoostingRegressor(learning_rate=0.1, n_estimators=100, max_depth=3)
     gbr_down[i].fit(X_train, Y_train_down[i])
 
-    y_bc_pred_up = gbr_up[i].predict(X_bc)
-    y_bc_pred_down = gbr_down[i].predict(X_bc)
-
-    biasCrxn_up[i] = np.average(Y_bc_up - y_bc_pred_up)
-    biasCrxn_down[i] = np.average(Y_bc_down - y_bc_pred_down)
-
 for i in range(len(X_test)):
-    fakeName = "../Data/FakeData/FakeData" + str(i) + ".txt"
+    fakeName = "../Data/FakeData/FakeData_x" + str(xs[i]) + "y" + str(ys[i]) + "z" + str(zs[i]) + "samp" + str(sample_num[i]) + ".txt"
     if not os.path.exists(fakeName):
         with open(fakeName, 'w+'): pass
     fakeDataFile = open(fakeName, "r+")
@@ -159,13 +153,13 @@ for i in range(len(X_test)):
     fakeDataFile.write(c2pt_header)
     testImg = X_test[i]
     for t in range(64):
-    	fakeDataFile.write(str(t) + " " + str(X_test[i][t]) + " " + str(X_test[i][t + 64]) + "\n")
+    	fakeDataFile.write(str(t) + " " + str(X_test[i][t] * N_factor) + " " + str(X_test[i][t + 64] * N_factor) + "\n")
     fakeDataFile.write(c2pt_footer)
     fakeDataFile.write(c3pt_S_header)
     for t in range(64):
-        pred_up = gbr_up[t].predict([testImg])[0] + biasCrxn_up[t]
-        pred_down = gbr_down[t].predict([testImg])[0] + biasCrxn_down[t]
-        fakeDataFile.write(str(t) + " " + str(pred_up) + " 0.0 " + str(pred_down) + " 0.0\n")
+        pred_up = gbr_up[t].predict([testImg])[0]
+        pred_down = gbr_down[t].predict([testImg])[0]
+        fakeDataFile.write(str(t) + " " + str(pred_up * N_factor) + " 0.0 " + str(pred_down * N_factor) + " 0.0\n")
     fakeDataFile.write(c3pt_footer)
 
 ### Vector Charge
@@ -176,8 +170,6 @@ X_test, Y_test_up, Y_test_down = features[BCEnd:], labels_V_up[:, BCEnd:], label
 
 gbr_up = list(range(64))
 gbr_down = list(range(64))
-biasCrxn_up = list(range(64))
-biasCrxn_down = list(range(64))
 for i in range(64):
     gbr_up[i] = GradientBoostingRegressor(learning_rate=0.1, n_estimators=100, max_depth=3)
     gbr_up[i].fit(X_train, Y_train_up[i])
@@ -185,21 +177,15 @@ for i in range(64):
     gbr_down[i] = GradientBoostingRegressor(learning_rate=0.1, n_estimators=100, max_depth=3)
     gbr_down[i].fit(X_train, Y_train_down[i])
 
-    y_bc_pred_up = gbr_up[i].predict(X_bc)
-    y_bc_pred_down = gbr_down[i].predict(X_bc)
-
-    biasCrxn_up[i] = np.average(Y_bc_up - y_bc_pred_up)
-    biasCrxn_down[i] = np.average(Y_bc_down - y_bc_pred_down)
-
 for i in range(len(X_test)):
-    fakeName = "../Data/FakeData/FakeData" + str(i) + ".txt"
+    fakeName = "../Data/FakeData/FakeData_x" + str(xs[i]) + "y" + str(ys[i]) + "z" + str(zs[i]) + "samp" + str(sample_num[i]) + ".txt"
     fakeDataFile = open(fakeName, "a")
     testImg = X_test[i]
     fakeDataFile.write(c3pt_V_header)
     for t in range(64):
-        pred_up = gbr_up[t].predict([testImg])[0] + biasCrxn_up[t]
-        pred_down = gbr_down[t].predict([testImg])[0] + biasCrxn_down[t]
-        fakeDataFile.write(str(t) + " " + str(pred_up) + " 0.0 " + str(pred_down) + " 0.0\n")
+        pred_up = gbr_up[t].predict([testImg])[0]
+        pred_down = gbr_down[t].predict([testImg])[0]
+        fakeDataFile.write(str(t) + " " + str(pred_up * N_factor) + " 0.0 " + str(pred_down * N_factor) + " 0.0\n")
     fakeDataFile.write(c3pt_footer)
 
 ### Axial Charge
@@ -210,8 +196,6 @@ X_test, Y_test_up, Y_test_down = features[BCEnd:], labels_A_up[:, BCEnd:], label
 
 gbr_up = list(range(64))
 gbr_down = list(range(64))
-biasCrxn_up = list(range(64))
-biasCrxn_down = list(range(64))
 for i in range(64):
     gbr_up[i] = GradientBoostingRegressor(learning_rate=0.1, n_estimators=100, max_depth=3)
     gbr_up[i].fit(X_train, Y_train_up[i])
@@ -219,19 +203,13 @@ for i in range(64):
     gbr_down[i] = GradientBoostingRegressor(learning_rate=0.1, n_estimators=100, max_depth=3)
     gbr_down[i].fit(X_train, Y_train_down[i])
 
-    y_bc_pred_up = gbr_up[i].predict(X_bc)
-    y_bc_pred_down = gbr_down[i].predict(X_bc)
-
-    biasCrxn_up[i] = np.average(Y_bc_up - y_bc_pred_up)
-    biasCrxn_down[i] = np.average(Y_bc_down - y_bc_pred_down)
-
 for i in range(len(X_test)):
-    fakeName = "../Data/FakeData/FakeData" + str(i) + ".txt"
+    fakeName = "../Data/FakeData/FakeData_x" + str(xs[i]) + "y" + str(ys[i]) + "z" + str(zs[i]) + "samp" + str(sample_num[i]) + ".txt"
     fakeDataFile = open(fakeName, "a")
     testImg = X_test[i]
     fakeDataFile.write(c3pt_A_header)
     for t in range(64):
-        pred_up = gbr_up[t].predict([testImg])[0] + biasCrxn_up[t]
-        pred_down = gbr_down[t].predict([testImg])[0] + biasCrxn_down[t]
-        fakeDataFile.write(str(t) + " " + str(pred_up) + " 0.0 " + str(pred_down) + " 0.0\n")
+        pred_up = gbr_up[t].predict([testImg])[0]
+        pred_down = gbr_down[t].predict([testImg])[0]
+        fakeDataFile.write(str(t) + " " + str(pred_up * N_factor) + " 0.0 " + str(pred_down * N_factor) + " 0.0\n")
     fakeDataFile.write(c3pt_footer)
