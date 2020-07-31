@@ -79,7 +79,7 @@ labels_V_down = np.array([[c3pt_V[i+j][2] for i in range(0, len(c3pt_V), 64)] fo
 
 for i in range(len(features_unshifted)):
     shift = int(features_unshifted[i, 0])
-    features.append(np.roll(features_unshifted[i, 1:], -shift))
+    features.append(np.append(np.roll(features_unshifted[i, 1:65], -shift), np.roll(features_unshifted[i, 65:], -shift)))
     labels_S_up[:, i] = np.roll(labels_S_up[:, i], -shift)
     labels_A_up[:, i] = np.roll(labels_A_up[:, i], -shift)
     labels_V_up[:, i] = np.roll(labels_V_up[:, i], -shift)
@@ -88,6 +88,30 @@ for i in range(len(features_unshifted)):
     labels_V_down[:, i] = np.roll(labels_V_down[:, i], -shift)
 
 features = np.array(features)
+
+
+def shuffle64Block(arr, perm):
+    new_arr = arr.reshape((len(arr) // 64, 64))
+    np.take(new_arr, perm, axis=0, out=new_arr)
+    return new_arr.reshape(len(new_arr) * 64)
+
+f_len = features.shape[0]
+
+perm = np.append(np.append(np.append(np.append(np.arange(0, f_len, 5), np.arange(1, f_len, 5)), np.arange(2, f_len, 5)), np.arange(3, f_len, 5)), np.arange(4, f_len, 5))
+print(perm)
+np.take(features, perm, axis=0, out=features)
+np.take(labels_S_up, perm, axis=1, out=labels_S_up)
+np.take(labels_A_up, perm, axis=1, out=labels_A_up)
+np.take(labels_V_up, perm, axis=1, out=labels_V_up)
+np.take(labels_S_down, perm, axis=1, out=labels_S_down)
+np.take(labels_A_down, perm, axis=1, out=labels_A_down)
+np.take(labels_V_down, perm, axis=1, out=labels_V_down)
+xs = shuffle64Block(np.array(xs), perm)
+ys = shuffle64Block(np.array(ys), perm)
+zs = shuffle64Block(np.array(zs), perm)
+ts = shuffle64Block(np.array(ts), perm)
+taus = shuffle64Block(np.array(taus), perm)
+sample_num = shuffle64Block(np.array(sample_num), perm)
 
 c2pt_footer = "ENDPROP\n"
 c3pt_footer = "END_NUC3PT\n"
@@ -132,9 +156,11 @@ PROJ: PPAR_5Z
 QUARKS:    up      down
 """
 
-labelFrac = 0.5
+labelFrac = 0.2
 
 labelEnd = int(len(labels_S_up[0]) * labelFrac)
+
+## Writing Fake Data
 
 X_train, Y_train_up, Y_train_down = features[:labelEnd], labels_S_up[:, :labelEnd], labels_S_down[:, :labelEnd]
 X_test, Y_test_up, Y_test_down = features[labelEnd:], labels_S_up[:, labelEnd:], labels_S_down[:, labelEnd:]
@@ -214,4 +240,55 @@ for i in range(len(X_test)):
         pred_up = gbr_up[t].predict([testImg])[0]
         pred_down = gbr_down[t].predict([testImg])[0]
         fakeDataFile.write(str(t) + " " + str(pred_up * N_factor) + " 0.0 " + str(pred_down * N_factor) + " 0.0\n")
+    fakeDataFile.write(c3pt_footer)
+
+
+## Writing Real data
+
+X_train, Y_train_up, Y_train_down = features[:labelEnd], labels_S_up[:, :labelEnd], labels_S_down[:, :labelEnd]
+X_test, Y_test_up, Y_test_down = features[labelEnd:], labels_S_up[:, labelEnd:], labels_S_down[:, labelEnd:]
+
+
+for i in range(len(X_test)):
+    fakeName = "../Data/RealData/RealData_x" + str(xs[64 * labelEnd + 64 * i]) + "y" + str(ys[64 * labelEnd + 64 * i]) + "z" + str(zs[64 * labelEnd + 64 * i]) + "samp" + str(sample_num[64 * labelEnd + 64 * i]) + "t" + str(taus[64 * labelEnd + 64 * i]) + ".txt"
+    if not os.path.exists(fakeName):
+        with open(fakeName, 'w+'): pass
+    fakeDataFile = open(fakeName, "r+")
+    fakeDataFile.truncate(0)
+    fakeDataFile.write(c2pt_header)
+    testImg = X_test[i]
+    for t in range(64):
+        fakeDataFile.write(str(t) + " " + str(X_test[i][t] * N_factor) + " " + str(X_test[i][t + 64] * N_factor) + "\n")
+    fakeDataFile.write(c2pt_footer)
+    fakeDataFile.write(c3pt_S_header)
+    for t in range(64):
+        fakeDataFile.write(str(t) + " " + str(Y_test_up[t][i] * N_factor) + " 0.0 " + str(Y_test_down[t][i] * N_factor) + " 0.0\n")
+    fakeDataFile.write(c3pt_footer)
+    
+### Vector Charge
+
+X_train, Y_train_up, Y_train_down = features[:labelEnd], labels_V_up[:, :labelEnd], labels_V_down[:, :labelEnd]
+X_test, Y_test_up, Y_test_down = features[labelEnd:], labels_V_up[:, labelEnd:], labels_V_down[:, labelEnd:]
+
+for i in range(len(X_test)):
+    fakeName = "../Data/RealData/RealData_x" + str(xs[64 * labelEnd + 64 * i]) + "y" + str(ys[64 * labelEnd + 64 * i]) + "z" + str(zs[64 * labelEnd + 64 * i]) + "samp" + str(sample_num[64 * labelEnd + 64 * i]) + "t" + str(taus[64 * labelEnd + 64 * i]) + ".txt"
+    fakeDataFile = open(fakeName, "a")
+    testImg = X_test[i]
+    fakeDataFile.write(c3pt_V_header)
+    for t in range(64):
+        fakeDataFile.write(str(t) + " " + str(Y_test_up[t][i] * N_factor) + " 0.0 " + str(Y_test_down[t][i] * N_factor) + " 0.0\n")
+    fakeDataFile.write(c3pt_footer)
+
+### Axial Charge
+
+X_train, Y_train_up, Y_train_down = features[:labelEnd], labels_A_up[:, :labelEnd], labels_A_down[:, :labelEnd]
+X_test, Y_test_up, Y_test_down = features[labelEnd:], labels_A_up[:, labelEnd:], labels_A_down[:, labelEnd:]
+
+for i in range(len(X_test)):
+    fakeName = "../Data/RealData/RealData_x" + str(xs[64 * labelEnd + 64 * i]) + "y" + str(ys[64 * labelEnd + 64 * i]) + "z" + str(zs[64 * labelEnd + 64 * i]) + "samp" + str(sample_num[64 * labelEnd + 64 * i]) + "t" + str(taus[64 * labelEnd + 64 * i]) + ".txt"
+    fakeDataFile = open(fakeName, "a")
+    testImg = X_test[i]
+    fakeDataFile.write(c3pt_A_header)
+    for t in range(64):
+        fakeDataFile.write(str(t) + " " + str(Y_test_up[t][i] * N_factor) + " 0.0 " + str(Y_test_down[t][i] * N_factor) + " 0.0\n")
     fakeDataFile.write(c3pt_footer)
